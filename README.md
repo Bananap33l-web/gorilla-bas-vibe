@@ -3,7 +3,7 @@
 A modern, browser‑based homage to the classic Gorilla.bas, built as a playful example of vibe coding.
 
 ## Demo
-[Play it here](https://bbenko.github.io/gorilla-bas-vibe-edition/)
+[Play it here](https://bbenko.github.io/gorilla-bas-vibe/)
 
 ## Features
 - Turn‑based banana lobbing with wind and gravity

@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GORILLA.BAS: Vibe Edition</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Fredoka:wght@400;600&display=swap");
+      :root {
+        --sky-top: #b9d9ff;
+        --sky-bottom: #f7fbff;
+        --sun: #ffd166;
+        --building: #3a3a3a;
+        --window: #ffe8a3;
+        --window-off: #3a3522;
+        --gorilla: #3a1f10;
+        --gorilla-outline: #f3d6b3;
+        --banana: #ffcc33;
+        --text: #1c2430;
+        --ui: #ffffffcc;
+        --accent: #2563eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Fredoka", "Trebuchet MS", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at 20% 10%, #ffffff 0%, #dff0ff 30%, #b9d9ff 60%, #9fc3ff 100%);
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+      .game {
+        width: min(1400px, 98vw);
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        gap: 12px;
+      }
+      h1 {
+        font-family: "Baloo 2", "Trebuchet MS", sans-serif;
+        font-size: 20px;
+        margin: 0;
+        letter-spacing: 0.5px;
+      }
+      .panel {
+        background: linear-gradient(135deg, #ffffffdd, #f5f1ffdd);
+        border: 1px solid #0000001a;
+        border-radius: 12px;
+        padding: 10px 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        align-items: center;
+        font-size: 14px;
+        box-shadow: 0 6px 18px #2a2a4a1f;
+        backdrop-filter: blur(6px);
+      }
+      .spacer {
+        flex: 1 1 auto;
+      }
+      label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      input[type="number"] {
+        width: 70px;
+        padding: 4px 6px;
+        border: 1px solid #00000033;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      button {
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid #00000033;
+        background: linear-gradient(135deg, #ffffff, #f0f4ff);
+        cursor: pointer;
+        box-shadow: 0 2px 6px #1018281a;
+      }
+      button.primary {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white;
+        border-color: #1e4ed0;
+      }
+      button:hover {
+        transform: translateY(-1px);
+      }
+      button:active {
+        transform: translateY(0);
+      }
+      #canvas {
+        width: 100%;
+        height: auto;
+        border-radius: 12px;
+        border: 1px solid #0000002a;
+        background: transparent;
+        display: block;
+        box-shadow: 0 18px 40px #0f172a2b;
+      }
+      .status {
+        margin-top: 8px;
+        font-size: 14px;
+      }
+      .kbd {
+        background: #111827;
+        color: #fff;
+        border-radius: 6px;
+        padding: 2px 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      .wind {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .wind svg {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="game">
+      <header>
+        <h1>GORILLA.BAS: Vibe Edition</h1>
+        <div class="wind">
+          Wind:
+          <svg id="windArrow" width="60" height="16" viewBox="0 0 60 16" aria-label="Wind strength">
+            <g id="windGroup">
+              <line id="windLine" x1="2" y1="8" x2="46" y2="8" stroke="#1c2430" stroke-width="3" stroke-linecap="round" />
+              <polygon id="windHead" points="46,8 38,3 38,13" fill="#1c2430" />
+            </g>
+          </svg>
+        </div>
+      </header>
+      <div class="panel">
+        <strong id="turnLabel">Player 1</strong>
+        <label>Angle <input id="angle" type="number" min="0" max="180" value="45" /></label>
+        <label>Velocity <input id="velocity" type="number" min="5" max="200" value="70" /></label>
+        <button id="throwBtn" class="primary">Throw</button>
+        <button id="nextTurnBtn" style="display:none">Next Turn</button>
+        <span class="spacer"></span>
+      </div>
+      <canvas id="canvas" width="1400" height="760" aria-label="Gorilla game"></canvas>
+      <div class="status" id="status"></div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const angleEl = document.getElementById("angle");
+      const velocityEl = document.getElementById("velocity");
+      const throwBtn = document.getElementById("throwBtn");
+      const nextTurnBtn = document.getElementById("nextTurnBtn");
+      const turnLabel = document.getElementById("turnLabel");
+      const statusEl = document.getElementById("status");
+      const windArrow = document.getElementById("windArrow");
+      const windGroup = document.getElementById("windGroup");
+      const windLine = document.getElementById("windLine");
+      const windHead = document.getElementById("windHead");
+
+      const W = canvas.width;
+      const H = canvas.height;
+      const buildCanvas = document.createElement("canvas");
+      buildCanvas.width = W;
+      buildCanvas.height = H;
+      const buildCtx = buildCanvas.getContext("2d");
+
+      const GRAVITY = 30; // px/s^2
+      const STEP = 1 / 60;
+      const GORILLA_RADIUS = 18;
+      const BANANA_RADIUS = 6;
+      const VELOCITY_SCALE = 2.6;
+
+      let buildings = [];
+      let gorillas = [];
+      let clouds = [];
+      let currentPlayer = 0;
+      let wind = 0;
+      let banana = null;
+      let inFlight = false;
+      let looping = false;
+      let lastTime = null;
+      let animTime = 0;
+      let explosions = [];
+      let awaitingNextTurn = false;
+      let score = [0, 0];
+      let audioCtx = null;
+
+      function rand(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      function newCity() {
+        buildings = [];
+        clouds = Array.from({ length: 6 }, () => ({
+          x: rand(60, W - 60),
+          y: rand(40, H * 0.32),
+          scale: rand(0.7, 1.4),
+          alpha: rand(0.22, 0.45),
+        }));
+        const cols = 12;
+        const colWidth = Math.floor(W / cols);
+        for (let i = 0; i < cols; i++) {
+          const height = Math.floor(rand(140, 360));
+          const palette = [
+            { hue: 210, sat: 20 },
+            { hue: 25, sat: 35 },
+            { hue: 320, sat: 28 },
+            { hue: 140, sat: 30 },
+            { hue: 0, sat: 28 },
+            { hue: 260, sat: 25 },
+          ];
+          const color = palette[Math.floor(rand(0, palette.length))];
+          const b = {
+            x: i * colWidth,
+            y: H - height,
+            w: colWidth,
+            h: height,
+            windows: [],
+            craters: [],
+            shade: Math.floor(rand(18, 32)),
+            hue: color.hue,
+            sat: color.sat,
+            windowSize: Math.floor(rand(5, 8)),
+          };
+
+          const rows = Math.max(2, Math.floor(b.h / 40));
+          const cols = Math.max(2, Math.floor(b.w / 25));
+          const padX = b.w / (cols + 1);
+          const padY = b.h / (rows + 1);
+          for (let r = 1; r <= rows; r++) {
+            for (let c = 1; c <= cols; c++) {
+              if (Math.random() > 0.25) {
+                b.windows.push({
+                  x: b.x + c * padX - b.windowSize / 2,
+                  y: b.y + r * padY - b.windowSize / 2,
+                  lit: Math.random() > 0.35,
+                });
+              }
+            }
+          }
+
+          buildings.push(b);
+        }
+
+        gorillas = [
+          {
+            x: buildings[1].x + buildings[1].w / 2,
+            y: buildings[1].y - GORILLA_RADIUS - 32,
+            alive: true,
+            cheer: 0,
+          },
+          {
+            x: buildings[cols - 2].x + buildings[cols - 2].w / 2,
+            y: buildings[cols - 2].y - GORILLA_RADIUS - 32,
+            alive: true,
+            cheer: 0,
+          },
+        ];
+
+        wind = Math.round(rand(-12, 12));
+        updateWindLabel();
+        banana = null;
+        inFlight = false;
+        looping = false;
+        explosions = [];
+        awaitingNextTurn = false;
+        nextTurnBtn.style.display = "none";
+        statusEl.textContent = `Score — Player 1: ${score[0]} | Player 2: ${score[1]}`;
+        updateTurnLabel();
+        draw();
+        focusAngleInput();
+      }
+
+      function updateTurnLabel() {
+        turnLabel.textContent = `Player ${currentPlayer + 1}`;
+      }
+
+      function focusAngleInput() {
+        angleEl.focus();
+        angleEl.select();
+      }
+
+      function updateWindLabel() {
+        const magnitude = Math.abs(wind);
+        const minLen = 16;
+        const maxLen = 90;
+        const scale = (maxLen - minLen) / 12;
+        const arrowLen = Math.round(minLen + magnitude * scale);
+        const headLen = 10;
+        const lineStart = 2;
+        const lineEnd = lineStart + arrowLen;
+        const totalWidth = lineEnd + headLen;
+
+        windArrow.setAttribute("width", totalWidth);
+        windArrow.setAttribute("viewBox", `0 0 ${totalWidth} 16`);
+        windLine.setAttribute("x1", lineStart);
+        windLine.setAttribute("x2", lineEnd);
+        windHead.setAttribute(
+          "points",
+          `${lineEnd},8 ${lineEnd - headLen},3 ${lineEnd - headLen},13`
+        );
+
+        if (wind < 0) {
+          windGroup.setAttribute("transform", `translate(${totalWidth} 0) scale(-1 1)`);
+        } else {
+          windGroup.removeAttribute("transform");
+        }
+      }
+
+      function drawSky() {
+        const gradient = ctx.createLinearGradient(0, 0, 0, H);
+        gradient.addColorStop(0, "#b9d9ff");
+        gradient.addColorStop(0.6, "#dfeeff");
+        gradient.addColorStop(1, "#f7fbff");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, W, H);
+
+        // Sun glow
+        const sunX = W * 0.5;
+        const sunY = H * 0.2;
+        const sunGlow = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, 80);
+        sunGlow.addColorStop(0, "rgba(255, 230, 160, 0.9)");
+        sunGlow.addColorStop(1, "rgba(255, 230, 160, 0)");
+        ctx.fillStyle = sunGlow;
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, 80, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "var(--sun)";
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, 34, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Horizon haze
+        const haze = ctx.createLinearGradient(0, H * 0.55, 0, H);
+        haze.addColorStop(0, "rgba(255,255,255,0)");
+        haze.addColorStop(1, "rgba(255,255,255,0.35)");
+        ctx.fillStyle = haze;
+        ctx.fillRect(0, H * 0.55, W, H * 0.45);
+
+        // Clouds
+        clouds.forEach((c) => drawCloud(c.x, c.y, c.scale, c.alpha));
+
+        // Soft vignette
+        const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.1, W / 2, H / 2, H * 0.7);
+        vignette.addColorStop(0, "rgba(255,255,255,0)");
+        vignette.addColorStop(1, "rgba(10,30,60,0.08)");
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      function drawCloud(x, y, scale, alpha) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(0, 0, 18, 0, Math.PI * 2);
+        ctx.arc(18, 2, 16, 0, Math.PI * 2);
+        ctx.arc(-18, 4, 14, 0, Math.PI * 2);
+        ctx.arc(4, -10, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawBuildings() {
+        buildCtx.clearRect(0, 0, W, H);
+        buildings.forEach((b) => {
+          const grad = buildCtx.createLinearGradient(0, b.y, 0, b.y + b.h);
+          grad.addColorStop(0, `hsl(${b.hue}, ${b.sat}%, ${b.shade + 10}%)`);
+          grad.addColorStop(1, `hsl(${b.hue}, ${b.sat}%, ${b.shade}%)`);
+          buildCtx.fillStyle = grad;
+          buildCtx.fillRect(b.x, b.y, b.w, b.h);
+
+          buildCtx.strokeStyle = `hsl(${b.hue}, ${Math.max(6, b.sat - 10)}%, ${b.shade - 8}%)`;
+          buildCtx.lineWidth = 2;
+          buildCtx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+
+          buildCtx.fillStyle = `hsl(${b.hue}, ${b.sat}%, ${b.shade + 16}%)`;
+          buildCtx.fillRect(b.x, b.y - 4, b.w, 5);
+
+          b.windows.forEach((w) => {
+            buildCtx.fillStyle = w.lit ? "var(--window)" : "var(--window-off)";
+            buildCtx.fillRect(w.x, w.y, b.windowSize, b.windowSize);
+          });
+
+          if (b.craters.length) {
+            buildCtx.save();
+            buildCtx.globalCompositeOperation = "destination-out";
+            b.craters.forEach((c) => {
+              buildCtx.beginPath();
+              buildCtx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+              buildCtx.fill();
+            });
+            buildCtx.restore();
+          }
+        });
+        ctx.drawImage(buildCanvas, 0, 0);
+      }
+
+      function drawGorilla(g) {
+        if (!g.alive) return;
+        ctx.save();
+        ctx.translate(g.x, g.y);
+        ctx.fillStyle = "var(--gorilla)";
+        ctx.strokeStyle = "var(--gorilla-outline)";
+        ctx.lineWidth = 2;
+
+        const cheerOffset = g.cheer > 0 ? Math.sin(animTime * 8) * 3 : 0;
+
+        // Torso and shoulders (broad, sloped)
+        ctx.beginPath();
+        ctx.ellipse(0, 12, 22, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, 2, 28, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Head with brow ridge
+        ctx.beginPath();
+        ctx.ellipse(0, -14, 12, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, -18, 13, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Long arms hanging (raise for chest pound)
+        ctx.beginPath();
+        ctx.ellipse(-26, 18 - cheerOffset, 9, 18, 0.2, 0, Math.PI * 2);
+        ctx.ellipse(26, 18 - cheerOffset, 9, 18, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Forearms
+        ctx.beginPath();
+        ctx.ellipse(-30, 34 - cheerOffset, 8, 14, 0.2, 0, Math.PI * 2);
+        ctx.ellipse(30, 34 - cheerOffset, 8, 14, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Legs (shorter than arms)
+        ctx.beginPath();
+        ctx.ellipse(-12, 36, 9, 7, 0.1, 0, Math.PI * 2);
+        ctx.ellipse(12, 36, 9, 7, -0.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Chest patch
+        ctx.fillStyle = "rgba(255, 220, 190, 0.55)";
+        ctx.beginPath();
+        ctx.ellipse(0, 12, 10, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Face (snout and eyes)
+        ctx.fillStyle = "rgba(255, 220, 190, 0.85)";
+        ctx.beginPath();
+        ctx.ellipse(0, -10, 7, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#111";
+        ctx.fillRect(-5, -14, 2, 2);
+        ctx.fillRect(3, -14, 2, 2);
+        ctx.fillRect(-1, -8, 2, 2);
+
+        ctx.restore();
+      }
+
+      function drawBanana(b) {
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        const angle = Math.atan2(b.vy, b.vx);
+        ctx.rotate(angle);
+
+        const grad = ctx.createLinearGradient(-10, -6, 10, 6);
+        grad.addColorStop(0, "#ffe67a");
+        grad.addColorStop(1, "#f6b73c");
+        ctx.fillStyle = grad;
+        ctx.strokeStyle = "#d8952c";
+        ctx.lineWidth = 1.5;
+
+        ctx.beginPath();
+        ctx.moveTo(-10, -4);
+        ctx.quadraticCurveTo(0, -10, 10, -2);
+        ctx.quadraticCurveTo(6, 6, -8, 6);
+        ctx.quadraticCurveTo(-12, 2, -10, -4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#6b4a1f";
+        ctx.beginPath();
+        ctx.arc(10, -2, 1.6, 0, Math.PI * 2);
+        ctx.arc(-10, -4, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawExplosions() {
+        explosions.forEach((e) => {
+          const t = e.age / e.duration;
+          if (e.shape === "ellipse") {
+            const rx = e.rx * t;
+            const ry = e.ry * t;
+            ctx.fillStyle = `rgba(255, 140, 0, ${1 - t})`;
+            ctx.beginPath();
+            ctx.ellipse(e.x, e.y, rx, ry, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = `rgba(255, 230, 170, ${1 - t})`;
+            ctx.beginPath();
+            ctx.ellipse(e.x, e.y, rx * 0.5, ry * 0.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            const radius = e.maxRadius * t;
+            ctx.fillStyle = `rgba(255, 140, 0, ${1 - t})`;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = `rgba(255, 230, 170, ${1 - t})`;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, radius * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
+      }
+
+      function draw() {
+        drawSky();
+        drawBuildings();
+        gorillas.forEach(drawGorilla);
+        if (banana) drawBanana(banana);
+        if (explosions.length) drawExplosions();
+      }
+
+      function ensureAudio() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+        return audioCtx;
+      }
+
+      function playSound(type) {
+        if (!audioCtx) return;
+        const ctxAudio = audioCtx;
+        const now = ctxAudio.currentTime;
+        const gain = ctxAudio.createGain();
+        gain.connect(ctxAudio.destination);
+        const osc = ctxAudio.createOscillator();
+        osc.connect(gain);
+
+        if (type === "throw") {
+          osc.type = "square";
+          osc.frequency.setValueAtTime(260, now);
+          osc.frequency.exponentialRampToValueAtTime(520, now + 0.12);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+          osc.start(now);
+          osc.stop(now + 0.22);
+        } else if (type === "boom") {
+          osc.type = "triangle";
+          osc.frequency.setValueAtTime(140, now);
+          osc.frequency.exponentialRampToValueAtTime(50, now + 0.4);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+          osc.start(now);
+          osc.stop(now + 0.5);
+        } else if (type === "miss") {
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(220, now);
+          osc.frequency.exponentialRampToValueAtTime(110, now + 0.2);
+          gain.gain.setValueAtTime(0.05, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+          osc.start(now);
+          osc.stop(now + 0.25);
+        }
+      }
+
+      function launch() {
+        if (inFlight) return;
+        if (awaitingNextTurn) return;
+        ensureAudio();
+        const angleValue = angleEl.value.trim();
+        const velocityValue = velocityEl.value.trim();
+        if (!angleValue || !velocityValue) {
+          statusEl.textContent = "Enter angle and velocity.";
+          return;
+        }
+        const angle = Number(angleValue) * (Math.PI / 180);
+        const speed = Number(velocityValue);
+        if (!Number.isFinite(angle) || !Number.isFinite(speed)) return;
+
+        const start = gorillas[currentPlayer];
+        const direction = currentPlayer === 0 ? 1 : -1;
+        const adjustedSpeed = speed * VELOCITY_SCALE;
+
+        banana = {
+          x: start.x,
+          y: start.y - 10,
+          vx: Math.cos(angle) * adjustedSpeed * direction,
+          vy: -Math.sin(angle) * adjustedSpeed,
+        };
+
+        inFlight = true;
+        playSound("throw");
+        angleEl.value = "";
+        velocityEl.value = "";
+        startLoop();
+      }
+
+      function hitGorilla(target) {
+        const dx = banana.x - target.x;
+        const dy = banana.y - target.y;
+        const dist = Math.hypot(dx, dy);
+        return dist < GORILLA_RADIUS + BANANA_RADIUS;
+      }
+
+      function pointInCrater(b, x, y) {
+        return b.craters.some((c) => Math.hypot(x - c.x, y - c.y) < c.r);
+      }
+
+      function hitBuilding() {
+        for (const b of buildings) {
+          if (
+            banana.x > b.x &&
+            banana.x < b.x + b.w &&
+            banana.y > b.y &&
+            banana.y < b.y + b.h
+          ) {
+            if (!pointInCrater(b, banana.x, banana.y)) return b;
+          }
+        }
+        return null;
+      }
+
+      function addExplosion(x, y, size = "small") {
+        explosions.push({
+          x,
+          y,
+          age: 0,
+          duration: size === "big" ? 0.7 : 0.45,
+          maxRadius: size === "big" ? 46 : 28,
+        });
+        startLoop();
+      }
+
+      function addEllipseExplosion(x, y, rx, ry) {
+        explosions.push({
+          x,
+          y,
+          age: 0,
+          duration: 0.9,
+          rx,
+          ry,
+          shape: "ellipse",
+        });
+        startLoop();
+      }
+
+      function damageBuildingsEllipse(x, y, rx, ry) {
+        const samples = 10;
+        for (const b of buildings) {
+          const closestX = Math.max(b.x, Math.min(x, b.x + b.w));
+          const closestY = Math.max(b.y, Math.min(y, b.y + b.h));
+          const dx = (closestX - x) / rx;
+          const dy = (closestY - y) / ry;
+          if (dx * dx + dy * dy > 1) continue;
+
+          for (let i = 0; i < samples; i++) {
+            const angle = rand(0, Math.PI * 2);
+            const r = Math.sqrt(Math.random());
+            const px = x + Math.cos(angle) * rx * r;
+            const py = y + Math.sin(angle) * ry * r;
+            if (px > b.x && px < b.x + b.w && py > b.y && py < b.y + b.h) {
+              b.craters.push({ x: px, y: py, r: rand(10, 20) });
+            }
+          }
+        }
+      }
+
+      function endTurn(reason, sound = "miss") {
+        inFlight = false;
+        banana = null;
+        currentPlayer = currentPlayer === 0 ? 1 : 0;
+        wind = Math.round(rand(-12, 12));
+        updateWindLabel();
+        updateTurnLabel();
+        statusEl.textContent = `${reason} Player ${currentPlayer + 1}, you're up.`;
+        playSound(sound);
+        focusAngleInput();
+      }
+
+      function startNextTurn() {
+        awaitingNextTurn = false;
+        nextTurnBtn.style.display = "none";
+        currentPlayer = currentPlayer === 0 ? 1 : 0;
+        newCity();
+      }
+
+      function startLoop() {
+        if (!looping) {
+          looping = true;
+          lastTime = null;
+          requestAnimationFrame(tick);
+        }
+      }
+
+      function tick(timestamp) {
+        if (!lastTime) lastTime = timestamp;
+        const dt = Math.min(0.035, (timestamp - lastTime) / 1000);
+        lastTime = timestamp;
+        animTime += dt;
+
+        if (banana) {
+          banana.vx += wind * dt;
+          banana.vy += GRAVITY * dt;
+          banana.x += banana.vx * dt;
+          banana.y += banana.vy * dt;
+
+          if (banana.x < -40 || banana.x > W + 40 || banana.y > H + 40) {
+            endTurn("Miss!", "miss");
+          } else {
+            const opponent = gorillas[currentPlayer === 0 ? 1 : 0];
+            if (hitGorilla(opponent)) {
+              score[currentPlayer] += 1;
+              opponent.alive = false;
+              gorillas[currentPlayer].cheer = 1.6;
+              addEllipseExplosion(opponent.x, opponent.y, 80, 50);
+              damageBuildingsEllipse(opponent.x, opponent.y + 20, 90, 60);
+              statusEl.textContent = `Boom! Player ${currentPlayer + 1} wins the round.`;
+              playSound("boom");
+              inFlight = false;
+              banana = null;
+              awaitingNextTurn = true;
+              nextTurnBtn.style.display = "inline-block";
+            } else {
+              const hit = hitBuilding();
+              if (hit) {
+                hit.craters.push({ x: banana.x, y: banana.y, r: 18 });
+                addExplosion(banana.x, banana.y, "small");
+                endTurn("Thud!", "boom");
+              }
+            }
+          }
+        }
+
+        explosions = explosions.filter((e) => {
+          e.age += dt;
+          return e.age < e.duration;
+        });
+        gorillas.forEach((g) => {
+          if (g.cheer > 0) g.cheer = Math.max(0, g.cheer - dt);
+        });
+
+        draw();
+
+        const cheering = gorillas.some((g) => g.cheer > 0);
+        if (banana || explosions.length || cheering) {
+          requestAnimationFrame(tick);
+        } else {
+          looping = false;
+          lastTime = null;
+        }
+      }
+
+      throwBtn.addEventListener("click", launch);
+      nextTurnBtn.addEventListener("click", startNextTurn);
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space" || e.code === "Enter") {
+          e.preventDefault();
+          if (awaitingNextTurn) {
+            startNextTurn();
+          } else {
+            launch();
+          }
+        }
+      });
+
+      newCity();
+    </script>
+  </body>
+</html>
